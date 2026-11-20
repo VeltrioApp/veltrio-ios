@@ -37,11 +37,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.veltrio.ios
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Veltrio/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Veltrio
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         TARGETED_DEVICE_FAMILY: "1,2"
+        # Chromecasts and Veltrio TVs are found on the local network.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Veltrio cherche les Chromecast et les TV Veltrio sur votre réseau local."
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/Core/Bindings
     dependencies:
       - package: MPVKit
