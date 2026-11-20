@@ -11,7 +11,7 @@ struct VeltrioApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            PhoneRootView()
                 .environment(store)
                 .environment(watch)
         }
