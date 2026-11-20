@@ -1,8 +1,17 @@
 # Veltrio for iOS
 
-Not started yet. This repository holds the CI/CD and the pinned
-[veltrio-core](https://github.com/VeltrioApp/veltrio-core) release the
-app will build on.
+In progress: the iPhone and iPad app, the macOS app's features and look.
+
+The macOS repository, [veltrio-macos](https://github.com/VeltrioApp/veltrio-macos),
+is a git submodule in `macos/`. Its `Shared/` folder (VeltrioKit) holds the
+services, theme and translations, and its views build for iOS too; this
+repository adds the iOS app around them (and the player, drawn with Metal).
+
+```bash
+git clone --recurse-submodules https://github.com/VeltrioApp/veltrio-ios
+./scripts/fetch-core.sh
+xcodegen generate && open Veltrio.xcodeproj
+```
 
 **Planned stack:** SwiftUI (iPhone, iPad), XcodeGen project like veltrio-macos, iOS 16+.
 
