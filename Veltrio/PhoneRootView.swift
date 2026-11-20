@@ -76,6 +76,11 @@ struct PhoneRootView: View {
         }
         if let tab = args.string(forKey: "veltrioTab"), let item = NavItem.allCases.first(where: { "\($0)" == tab }) { selection = item }
         if args.bool(forKey: "veltrioSettings") { showSettings = true }
+        if let raw = args.string(forKey: "veltrioPlay"), let url = URL(string: raw) {
+            path(selection).wrappedValue.append(PlayerDestination(
+                kind: .libraryItem(.init(url: url, serverName: "Test", itemId: "test", poster: nil, itemType: "Movie")),
+                title: "Test"))
+        }
         if args.bool(forKey: "veltrioSearch") { path(selection).wrappedValue.append(SearchDestination()) }
         if let detail = args.string(forKey: "veltrioDetail"), let addon = store.addons.first {
             let parts = detail.split(separator: ":", maxSplits: 1).map(String.init)

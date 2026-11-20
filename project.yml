@@ -30,7 +30,8 @@ targets:
       # services, the theme and the translations.
       - path: macos/Shared
       - path: macos/Veltrio/Views
-        excludes: [MPVPlayer.swift, PlayerView.swift, PlayerChannelList.swift]
+        # The Mac's video surface; iOS has its own (Veltrio/Player).
+        excludes: [MPVPlayer.swift]
       - path: Core/Bindings/veltrio.swift
     settings:
       base:
