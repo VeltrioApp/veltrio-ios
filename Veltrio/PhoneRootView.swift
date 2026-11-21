@@ -8,6 +8,7 @@ struct PhoneRootView: View {
     @State private var selection: NavItem = .home
     @State private var paths: [NavItem: NavigationPath] = [:]
     @State private var showSettings = false
+    @State private var showOnboarding = false
     private let prefs = UserPrefs.shared
 
     private var preferredScheme: ColorScheme? {
@@ -44,7 +45,20 @@ struct PhoneRootView: View {
         .sheet(isPresented: $showSettings) {
             SettingsSheet().tint(Theme.Palette.accent).preferredColorScheme(preferredScheme)
         }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView { goToTab in
+                showOnboarding = false
+                if let goToTab { selection = goToTab }
+            }
+            .tint(Theme.Palette.accent)
+            .preferredColorScheme(preferredScheme)
+        }
         .task { await debugLaunch() }
+        .onAppear { checkOnboarding() }
+        .onReceive(NotificationCenter.default.publisher(for: .veltrioShowOnboarding)) { _ in
+            showSettings = false
+            showOnboarding = true
+        }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioGoto)) { note in
             if let item = note.object as? NavItem { selection = item }
         }
@@ -64,6 +78,32 @@ struct PhoneRootView: View {
     }
 
     @Environment(AppStore.self) private var store
+
+    private func checkOnboarding() {
+        #if DEBUG
+        let args = UserDefaults.standard
+        if args.bool(forKey: "veltrioOnboarding") {
+            showOnboarding = true
+            return
+        }
+        if args.string(forKey: "veltrioInstall") != nil
+            || args.string(forKey: "veltrioPlay") != nil
+            || args.string(forKey: "veltrioDetail") != nil
+            || args.bool(forKey: "veltrioSettings")
+            || args.bool(forKey: "veltrioSearch") {
+            return
+        }
+        #endif
+        if !prefs.hasCompletedOnboarding {
+            let alreadyConfigured = !store.addons.isEmpty || !store.iptvPlaylists.isEmpty
+                || store.jellyfin.isConnected || store.emby.isConnected || store.plex.isConnected
+            if alreadyConfigured {
+                prefs.hasCompletedOnboarding = true
+            } else {
+                showOnboarding = true
+            }
+        }
+    }
 
     /// Debug builds: `-veltrioInstall <manifest url>`, `-veltrioTab home|library|iptv|addons`,
     /// `-veltrioDetail <type>:<id>` set the app up for screenshots in the
