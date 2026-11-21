@@ -40,7 +40,9 @@ struct PhoneRootView: View {
             .fullScreenCover(isPresented: $showOnboarding) {
                 OnboardingView { goToTab in
                     showOnboarding = false
-                    if let goToTab { selection = .section(goToTab) }
+                    if let goToTab {
+                        selection = goToTab == .addons ? .settings : .section(goToTab)
+                    }
                 }
                 .tint(Theme.Palette.accent)
                 .preferredColorScheme(preferredScheme)
@@ -51,7 +53,9 @@ struct PhoneRootView: View {
                 showOnboarding = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .veltrioGoto)) { note in
-                if let item = note.object as? NavItem { selection = .section(item) }
+                if let item = note.object as? NavItem {
+                    selection = item == .addons ? .settings : .section(item)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .veltrioPlay)) { note in
                 if let destination = note.object as? PlayerDestination {
@@ -75,15 +79,19 @@ struct PhoneRootView: View {
     private var tabContent: some View {
         if #available(iOS 18.0, *) {
             TabView(selection: $selection) {
-                ForEach(NavItem.allCases) { item in
-                    Tab(LocalizedStringKey(item.rawValue), systemImage: item.icon, value: PhoneTab.section(item)) {
-                        sectionStack(item)
-                    }
+                Tab(LocalizedStringKey(NavItem.home.rawValue), systemImage: NavItem.home.icon, value: PhoneTab.section(.home)) {
+                    sectionStack(.home)
+                }
+                Tab(LocalizedStringKey(NavItem.library.rawValue), systemImage: NavItem.library.icon, value: PhoneTab.section(.library)) {
+                    sectionStack(.library)
+                }
+                Tab(LocalizedStringKey(NavItem.iptv.rawValue), systemImage: NavItem.iptv.icon, value: PhoneTab.section(.iptv)) {
+                    sectionStack(.iptv)
                 }
                 Tab(LocalizedStringKey("Settings"), systemImage: "gearshape.fill", value: PhoneTab.settings) {
                     settingsTab
                 }
-                Tab(LocalizedStringKey("Search"), systemImage: "magnifyingglass", value: PhoneTab.search, role: .search) {
+                Tab(value: PhoneTab.search, role: .search) {
                     searchTab
                 }
             }
