@@ -73,7 +73,31 @@ final class MPVMetalView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         metalLayer.frame = bounds
+        // The drawable follows the view (rotation, split screen): MoltenVK
+        // rebuilds its swapchain at this size, else mpv keeps drawing at the
+        // size the player opened with, in a corner.
+        let scale = metalLayer.contentsScale
+        let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        let resized = metalLayer.drawableSize != size
+        metalLayer.drawableSize = size
         CATransaction.commit()
+        if resized, size.width > 1, size.height > 1 { scheduleVideoReset() }
+    }
+
+    /// mpv's MoltenVK context only sizes its swapchain when the video
+    /// output starts, so a resize (the player opening in portrait, then
+    /// turning to landscape) restarts the video output once the layout
+    /// settles.
+    private var resetTask: Task<Void, Never>?
+    private func scheduleVideoReset() {
+        resetTask?.cancel()
+        resetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self, !Task.isCancelled,
+                  UIApplication.shared.applicationState != .background else { return }
+            engine.setVideoEnabled(false)
+            engine.setVideoEnabled(true)
+        }
     }
 
     // In the background there is nothing to draw on: paused, video off,
