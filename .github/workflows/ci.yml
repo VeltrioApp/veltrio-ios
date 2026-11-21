@@ -30,4 +30,4 @@ jobs:
         if: hashFiles('project.yml') != ''
         run: |
           xcodebuild -project Veltrio.xcodeproj -scheme Veltrio \
-            -destination "platform=iOS Simulator,name=iPhone 16" build CODE_SIGNING_ALLOWED=NO
+            -destination "generic/platform=iOS Simulator" build CODE_SIGNING_ALLOWED=NO

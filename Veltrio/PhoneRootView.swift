@@ -81,6 +81,17 @@ struct PhoneRootView: View {
                 kind: .libraryItem(.init(url: url, serverName: "Test", itemId: "test", poster: nil, itemType: "Movie")),
                 title: "Test"))
         }
+        // `-veltrioTorrent <info hash>` [`-veltrioFileIdx <n>`] plays a torrent through the core's engine.
+        if let hash = args.string(forKey: "veltrioTorrent") {
+            let stream = Stream(name: "Test", title: "Torrent", description: nil,
+                                source: .torrent(infoHash: hash, fileIdx: args.object(forKey: "veltrioFileIdx") == nil ? nil : Int32(args.integer(forKey: "veltrioFileIdx")), sources: []),
+                                subtitleLanguages: [], behaviorHintsJson: nil)
+            path(selection).wrappedValue.append(PlayerDestination(
+                kind: .stream(.init(stream: stream, addonId: "test", addonName: "Test", contentId: "test",
+                                    contentType: "movie", videoId: nil, season: nil, episode: nil,
+                                    poster: nil, background: nil)),
+                title: "Torrent"))
+        }
         if args.bool(forKey: "veltrioSearch") { path(selection).wrappedValue.append(SearchDestination()) }
         if let detail = args.string(forKey: "veltrioDetail"), let addon = store.addons.first {
             let parts = detail.split(separator: ":", maxSplits: 1).map(String.init)
