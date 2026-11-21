@@ -5,9 +5,13 @@ import SwiftUI
 /// top bar. The pages are the shared views (macos/Veltrio/Views); the player
 /// goes full screen, bars hidden.
 struct PhoneRootView: View {
-    @State private var selection: NavItem = .home
+    private enum PhoneTab: Hashable {
+        case section(NavItem)
+        case settings
+    }
+
+    @State private var selection: PhoneTab = .section(.home)
     @State private var paths: [NavItem: NavigationPath] = [:]
-    @State private var showSettings = false
     @State private var showOnboarding = false
     private let prefs = UserPrefs.shared
 
@@ -17,6 +21,11 @@ struct PhoneRootView: View {
         case .dark:   return .dark
         case .light:  return .light
         }
+    }
+
+    private var activeNavItem: NavItem {
+        if case .section(let item) = selection { return item }
+        return .home
     }
 
     private func path(_ item: NavItem) -> Binding<NavigationPath> {
@@ -37,18 +46,23 @@ struct PhoneRootView: View {
                     .destinations()
                 }
                 .tabItem { Label(LocalizedStringKey(item.rawValue), systemImage: item.icon) }
-                .tag(item)
+                .tag(PhoneTab.section(item))
             }
+
+            VStack(spacing: 0) {
+                topBar
+                SettingsView()
+            }
+            .background(Theme.Palette.background.ignoresSafeArea())
+            .tabItem { Label(LocalizedStringKey("Settings"), systemImage: "gearshape.fill") }
+            .tag(PhoneTab.settings)
         }
         .tint(Theme.Palette.accent)
         .preferredColorScheme(preferredScheme)
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet().tint(Theme.Palette.accent).preferredColorScheme(preferredScheme)
-        }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView { goToTab in
                 showOnboarding = false
-                if let goToTab { selection = goToTab }
+                if let goToTab { selection = .section(goToTab) }
             }
             .tint(Theme.Palette.accent)
             .preferredColorScheme(preferredScheme)
@@ -56,24 +70,27 @@ struct PhoneRootView: View {
         .task { await debugLaunch() }
         .onAppear { checkOnboarding() }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioShowOnboarding)) { _ in
-            showSettings = false
             showOnboarding = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioGoto)) { note in
-            if let item = note.object as? NavItem { selection = item }
+            if let item = note.object as? NavItem { selection = .section(item) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioPlay)) { note in
-            if let destination = note.object as? PlayerDestination { path(selection).wrappedValue.append(destination) }
+            if let destination = note.object as? PlayerDestination {
+                if case .settings = selection { selection = .section(.home) }
+                path(activeNavItem).wrappedValue.append(destination)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioZap)) { note in
             guard let destination = note.object as? PlayerDestination else { return }
-            var p = path(selection).wrappedValue
+            var p = path(activeNavItem).wrappedValue
             if !p.isEmpty { p.removeLast() }
             p.append(destination)
-            path(selection).wrappedValue = p
+            path(activeNavItem).wrappedValue = p
         }
         .onReceive(NotificationCenter.default.publisher(for: .veltrioOpenSearch)) { _ in
-            path(selection).wrappedValue.append(SearchDestination())
+            if case .settings = selection { selection = .section(.home) }
+            path(activeNavItem).wrappedValue.append(SearchDestination())
         }
     }
 
@@ -114,10 +131,10 @@ struct PhoneRootView: View {
         if let url = args.string(forKey: "veltrioInstall"), !store.addons.contains(where: { $0.manifest.transportUrl == url }) {
             await store.installAddon(url: url)
         }
-        if let tab = args.string(forKey: "veltrioTab"), let item = NavItem.allCases.first(where: { "\($0)" == tab }) { selection = item }
-        if args.bool(forKey: "veltrioSettings") { showSettings = true }
+        if let tab = args.string(forKey: "veltrioTab"), let item = NavItem.allCases.first(where: { "\($0)" == tab }) { selection = .section(item) }
+        if args.bool(forKey: "veltrioSettings") { selection = .settings }
         if let raw = args.string(forKey: "veltrioPlay"), let url = URL(string: raw) {
-            path(selection).wrappedValue.append(PlayerDestination(
+            path(activeNavItem).wrappedValue.append(PlayerDestination(
                 kind: .libraryItem(.init(url: url, serverName: "Test", itemId: "test", poster: nil, itemType: "Movie")),
                 title: "Test"))
         }
@@ -126,16 +143,16 @@ struct PhoneRootView: View {
             let stream = Stream(name: "Test", title: "Torrent", description: nil,
                                 source: .torrent(infoHash: hash, fileIdx: args.object(forKey: "veltrioFileIdx") == nil ? nil : Int32(args.integer(forKey: "veltrioFileIdx")), sources: []),
                                 subtitleLanguages: [], behaviorHintsJson: nil)
-            path(selection).wrappedValue.append(PlayerDestination(
+            path(activeNavItem).wrappedValue.append(PlayerDestination(
                 kind: .stream(.init(stream: stream, addonId: "test", addonName: "Test", contentId: "test",
                                     contentType: "movie", videoId: nil, season: nil, episode: nil,
                                     poster: nil, background: nil)),
                 title: "Torrent"))
         }
-        if args.bool(forKey: "veltrioSearch") { path(selection).wrappedValue.append(SearchDestination()) }
+        if args.bool(forKey: "veltrioSearch") { path(activeNavItem).wrappedValue.append(SearchDestination()) }
         if let detail = args.string(forKey: "veltrioDetail"), let addon = store.addons.first {
             let parts = detail.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 { path(selection).wrappedValue.append(DetailDestination(addon: addon, type: parts[0], id: parts[1], name: parts[1])) }
+            if parts.count == 2 { path(activeNavItem).wrappedValue.append(DetailDestination(addon: addon, type: parts[0], id: parts[1], name: parts[1])) }
         }
         #endif
     }
@@ -150,16 +167,16 @@ struct PhoneRootView: View {
         }
     }
 
-    /// The macOS top bar on a phone: the serif wordmark, search and settings.
+    /// The macOS top bar on a phone: the serif wordmark and search.
     private var topBar: some View {
         HStack(spacing: 4) {
             Text("Veltrio").font(Theme.Font.displaySerif(26, weight: .bold)).foregroundStyle(Theme.Palette.textPrimary)
             Spacer()
-            Button { path(selection).wrappedValue.append(SearchDestination()) } label: {
+            Button {
+                if case .settings = selection { selection = .section(.home) }
+                path(activeNavItem).wrappedValue.append(SearchDestination())
+            } label: {
                 Image(systemName: "magnifyingglass").frame(width: 44, height: 44)
-            }
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape").frame(width: 44, height: 44)
             }
         }
         .font(.system(size: 18, weight: .medium))
