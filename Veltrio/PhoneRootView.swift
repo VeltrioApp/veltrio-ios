@@ -137,7 +137,10 @@ private extension View {
         self
             .navigationDestination(for: DetailDestination.self) { DetailView(destination: $0).toolbar(.hidden, for: .tabBar) }
             .navigationDestination(for: PlayerDestination.self) { dest in
+                // One player per destination: zapping replaces the top of
+                // the stack, and a reused view would keep the old stream.
                 PlayerView(destination: dest)
+                    .id(dest)
                     .toolbar(.hidden, for: .tabBar, .navigationBar)
                     .ignoresSafeArea()
             }
