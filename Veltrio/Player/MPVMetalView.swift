@@ -41,11 +41,15 @@ struct MPVPlayer: UIViewRepresentable {
 final class MPVMetalView: UIView {
     let engine = MPVEngine()
     private let metalLayer = MetalLayer()
+    private var started = false
+    private var lastResetSize: CGSize = .zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
-        metalLayer.contentsScale = UIScreen.main.nativeScale
+        // Cap Metal backing scale at 2x on 3x phones: cuts MoltenVK fragment
+        // shading work by >50% with no visible loss on a phone screen.
+        metalLayer.contentsScale = min(UIScreen.main.nativeScale, 2.0)
         metalLayer.framebufferOnly = true
         metalLayer.maximumDrawableCount = 3
         metalLayer.presentsWithTransaction = false
@@ -56,6 +60,15 @@ final class MPVMetalView: UIView {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
 
+        NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.willEnterForegroundNotification, object: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private func startEngineIfNeeded() {
+        guard !started else { return }
+        started = true
         var surface = metalLayer
         engine.start { mpv in
             mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &surface)
@@ -63,50 +76,54 @@ final class MPVMetalView: UIView {
             _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
             _ = mpv_set_option_string(mpv, "gpu-context", "moltenvk")
             _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+            _ = mpv_set_option_string(mpv, "hwdec-codecs", "all")
+            _ = mpv_set_option_string(mpv, "vulkan-async-transfer", "yes")
+            _ = mpv_set_option_string(mpv, "vulkan-async-compute", "yes")
             _ = mpv_set_option_string(mpv, "profile", "fast")
             _ = mpv_set_option_string(mpv, "scale", "bilinear")
             _ = mpv_set_option_string(mpv, "dscale", "bilinear")
             _ = mpv_set_option_string(mpv, "cscale", "bilinear")
             _ = mpv_set_option_string(mpv, "dither", "no")
+            _ = mpv_set_option_string(mpv, "deband", "no")
+            _ = mpv_set_option_string(mpv, "hdr-compute-peak", "no")
+            _ = mpv_set_option_string(mpv, "deinterlace", "no")
             _ = mpv_set_option_string(mpv, "framedrop", "vo")
             _ = mpv_set_option_string(mpv, "video-sync", "audio")
+            _ = mpv_set_option_string(mpv, "interpolation", "no")
             _ = mpv_set_option_string(mpv, "vd-lavc-threads", "0")
         }
-        NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.willEnterForegroundNotification, object: nil)
     }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        guard bounds.width > 1, bounds.height > 1 else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         metalLayer.frame = bounds
-        // The drawable follows the view (rotation, split screen): MoltenVK
-        // rebuilds its swapchain at this size, else mpv keeps drawing at the
-        // size the player opened with, in a corner.
         let scale = metalLayer.contentsScale
         let size = CGSize(width: floor(bounds.width * scale), height: floor(bounds.height * scale))
-        let prev = metalLayer.drawableSize
-        let meaningfullyResized = prev.width > 1 && prev.height > 1
-            && (abs(prev.width - size.width) > 2 || abs(prev.height - size.height) > 2)
-        if abs(prev.width - size.width) > 0.5 || abs(prev.height - size.height) > 0.5 {
+        if abs(metalLayer.drawableSize.width - size.width) > 0.5 || abs(metalLayer.drawableSize.height - size.height) > 0.5 {
             metalLayer.drawableSize = size
         }
         CATransaction.commit()
-        if meaningfullyResized, size.width > 1, size.height > 1 { scheduleVideoReset() }
+
+        if !started {
+            lastResetSize = size
+            startEngineIfNeeded()
+        } else if abs(lastResetSize.width - size.width) > 4 || abs(lastResetSize.height - size.height) > 4 {
+            lastResetSize = size
+            scheduleVideoReset()
+        }
     }
 
     /// mpv's MoltenVK context only sizes its swapchain when the video
-    /// output starts, so a resize (the player opening in portrait, then
-    /// turning to landscape) restarts the video output once the layout
-    /// settles.
+    /// output starts, so a rotation restarts the video output once the
+    /// layout settles.
     private var resetTask: Task<Void, Never>?
     private func scheduleVideoReset() {
         resetTask?.cancel()
         resetTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: .milliseconds(200))
             guard let self, !Task.isCancelled,
                   UIApplication.shared.applicationState != .background else { return }
             engine.setVideoEnabled(false)
