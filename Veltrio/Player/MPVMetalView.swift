@@ -47,6 +47,8 @@ final class MPVMetalView: UIView {
         backgroundColor = .black
         metalLayer.contentsScale = UIScreen.main.nativeScale
         metalLayer.framebufferOnly = true
+        metalLayer.maximumDrawableCount = 3
+        metalLayer.presentsWithTransaction = false
         metalLayer.backgroundColor = UIColor.black.cgColor
         layer.addSublayer(metalLayer)
 
@@ -61,6 +63,14 @@ final class MPVMetalView: UIView {
             _ = mpv_set_option_string(mpv, "gpu-api", "vulkan")
             _ = mpv_set_option_string(mpv, "gpu-context", "moltenvk")
             _ = mpv_set_option_string(mpv, "hwdec", "videotoolbox")
+            _ = mpv_set_option_string(mpv, "profile", "fast")
+            _ = mpv_set_option_string(mpv, "scale", "bilinear")
+            _ = mpv_set_option_string(mpv, "dscale", "bilinear")
+            _ = mpv_set_option_string(mpv, "cscale", "bilinear")
+            _ = mpv_set_option_string(mpv, "dither", "no")
+            _ = mpv_set_option_string(mpv, "framedrop", "vo")
+            _ = mpv_set_option_string(mpv, "video-sync", "audio")
+            _ = mpv_set_option_string(mpv, "vd-lavc-threads", "0")
         }
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.willEnterForegroundNotification, object: nil)
@@ -77,11 +87,15 @@ final class MPVMetalView: UIView {
         // rebuilds its swapchain at this size, else mpv keeps drawing at the
         // size the player opened with, in a corner.
         let scale = metalLayer.contentsScale
-        let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
-        let resized = metalLayer.drawableSize != size
-        metalLayer.drawableSize = size
+        let size = CGSize(width: floor(bounds.width * scale), height: floor(bounds.height * scale))
+        let prev = metalLayer.drawableSize
+        let meaningfullyResized = prev.width > 1 && prev.height > 1
+            && (abs(prev.width - size.width) > 2 || abs(prev.height - size.height) > 2)
+        if abs(prev.width - size.width) > 0.5 || abs(prev.height - size.height) > 0.5 {
+            metalLayer.drawableSize = size
+        }
         CATransaction.commit()
-        if resized, size.width > 1, size.height > 1 { scheduleVideoReset() }
+        if meaningfullyResized, size.width > 1, size.height > 1 { scheduleVideoReset() }
     }
 
     /// mpv's MoltenVK context only sizes its swapchain when the video
