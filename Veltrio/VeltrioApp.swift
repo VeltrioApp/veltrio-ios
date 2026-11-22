@@ -4,6 +4,7 @@ import SwiftUI
 struct VeltrioApp: App {
     @State private var store = AppStore()
     @State private var watch = WatchStore()
+    @State private var prefs = UserPrefs.shared
 
     init() {
         // The core's torrent engine writes under $HOME/.cache: in an iOS
@@ -18,6 +19,7 @@ struct VeltrioApp: App {
             PhoneRootView()
                 .environment(store)
                 .environment(watch)
+                .environment(\.locale, prefs.resolvedLocale)
         }
     }
 }
